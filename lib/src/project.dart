@@ -77,12 +77,9 @@ const Set<String> firebasePackages = {
 
 /// The set of supported Flutter-oriented packages.
 Set<String> supportedFlutterPackages({required bool devMode}) => {
-      'flutter_bloc',
-      'flutter_hooks',
       'flutter_lints',
       'flutter_riverpod',
       'google_fonts',
-      'hooks_riverpod',
       'provider',
       'english_words',
       'firebase_analytics',

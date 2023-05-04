@@ -170,6 +170,9 @@ Map<String, String> packageVersionConstraints({required bool oldChannel}) {
     'firebase_auth': '4.2.5',
     'firebase_core': '2.4.1',
     'firebase_core_web': '2.1.0',
+    'go_router': '6.0.1',
+    'flutter_riverpod': '2.2.0',
+    'riverpod': '2.2.0',
   };
 }
 
