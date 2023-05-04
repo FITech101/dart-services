@@ -169,6 +169,7 @@ Map<String, String> packageVersionConstraints({required bool oldChannel}) {
     'cloud_firestore': '4.3.1',
     'firebase_auth': '4.2.5',
     'firebase_core': '2.4.1',
+    'firebase_core_web': '2.1.0',
   };
 }
 
