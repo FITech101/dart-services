@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.analyzer_server_test;
-
 import 'dart:io';
 
 import 'package:dart_services/src/analysis_server.dart';
@@ -79,8 +77,9 @@ void defineTests() {
           .any((completion) => completion.completion['completion'] == expected);
 
   group('Platform SDK analysis_server', () {
+    late Sdk sdk;
     setUp(() async {
-      final sdk = Sdk.create(channel);
+      sdk = Sdk.create(channel);
       analysisServer = DartAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
       await analysisServer.init();
     });
@@ -104,9 +103,11 @@ void defineTests() {
       expect(results.issues.length, 1);
       final issue = results.issues[0];
       expect(issue.line, 2);
+      expect(issue.column, 7);
       expect(issue.kind, 'info');
-      expect(
-          issue.message, 'Prefer typing uninitialized variables and fields.');
+      expect(issue.message,
+          'An uninitialized variable should have an explicit type annotation.');
+      expect(issue.code, 'prefer_typing_uninitialized_variables');
     });
 
     test('repro #126 - completions polluted on second request', () async {
@@ -230,8 +231,7 @@ void defineTests() {
   group('Flutter cached SDK analysis_server', () {
     setUp(() async {
       final sdk = Sdk.create(channel);
-      analysisServer =
-          FlutterAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
+      analysisServer = DartAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
       await analysisServer.init();
     });
 
@@ -251,8 +251,9 @@ void defineTests() {
   //--------------------------------------------------------
   // Begin testing the multi file group files={} map entry points:
   group('Platform SDK analysis_server multifile files={}', () {
+    late Sdk sdk;
     setUp(() async {
-      final sdk = Sdk.create(channel);
+      sdk = Sdk.create(channel);
       analysisServer = DartAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
       await analysisServer.init();
     });
@@ -282,14 +283,14 @@ void defineTests() {
       final issue = results.issues[0];
       expect(issue.line, 2);
       expect(issue.kind, 'info');
-      expect(
-          issue.message, 'Prefer typing uninitialized variables and fields.');
+      expect(issue.message,
+          'An uninitialized variable should have an explicit type annotation.');
     });
 
     test('files={} repro #126 - completions polluted on second request',
         () async {
-      final Map<String, String> files = {kMainDart: completionFilterCode};
-      final Location location = Location(kMainDart, 17);
+      final files = <String, String>{kMainDart: completionFilterCode};
+      final location = Location(kMainDart, 17);
       // https://github.com/dart-lang/dart-services/issues/126
       return analysisServer.completeFiles(files, location).then((results) {
         return analysisServer.completeFiles(files, location).then((results) {

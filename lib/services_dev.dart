@@ -3,7 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 
 /// A dev-time only server.
-library services_dev;
+library;
 
 import 'dart:async';
 import 'dart:io';
@@ -16,9 +16,9 @@ import 'package:shelf/shelf_io.dart' as shelf;
 import 'src/common_server_api.dart';
 import 'src/common_server_impl.dart';
 import 'src/github_oauth_handler.dart';
+import 'src/logging.dart';
 import 'src/sdk.dart';
 import 'src/server_cache.dart';
-import 'src/shelf_cors.dart' as shelf_cors;
 
 final Logger _logger = Logger('services');
 
@@ -27,8 +27,7 @@ Future<void> main(List<String> args) async {
   parser
     ..addOption('channel', mandatory: true)
     ..addOption('port', abbr: 'p', defaultsTo: '8080')
-    ..addOption('server-url', defaultsTo: 'http://localhost')
-    ..addFlag('null-safety');
+    ..addOption('server-url', defaultsTo: 'http://localhost');
 
   final result = parser.parse(args);
   final port = int.tryParse(result['port'] as String);
@@ -39,22 +38,22 @@ Future<void> main(List<String> args) async {
   }
 
   Logger.root.level = Level.FINER;
-  Logger.root.onRecord.listen((LogRecord record) {
-    print(record);
-    if (record.stackTrace != null) print(record.stackTrace);
-  });
+  emitLogsToStdout();
 
   await GitHubOAuthHandler.initFromEnvironmentalVars();
 
-  await EndpointsServer.serve(port, Sdk.create(result['channel'] as String),
-      result['null-safety'] as bool);
+  final channelName = result['channel'] as String;
+
+  await EndpointsServer.serve(port, Sdk.create(channelName));
+
   _logger.info('Listening on port $port');
 }
 
 class EndpointsServer {
-  static Future<EndpointsServer> serve(
-      int port, Sdk sdk, bool nullSafety) async {
-    final endpointsServer = EndpointsServer._(sdk, nullSafety);
+  static Future<EndpointsServer> serve(int port, Sdk sdk) async {
+    final endpointsServer = EndpointsServer._(sdk);
+    await endpointsServer.init();
+
     await shelf.serve(endpointsServer.handler, InternetAddress.anyIPv4, port);
     return endpointsServer;
   }
@@ -62,40 +61,24 @@ class EndpointsServer {
   late final Pipeline pipeline;
   late final Handler handler;
   late final CommonServerApi commonServerApi;
+  late final CommonServerImpl commonServerImpl;
 
-  EndpointsServer._(Sdk sdk, bool nullSafety) {
-    final commonServerImpl = CommonServerImpl(
-      _ServerContainer(),
-      _Cache(),
-      sdk,
-    );
+  EndpointsServer._(Sdk sdk) {
+    commonServerImpl = CommonServerImpl(_Cache(), sdk);
     commonServerApi = CommonServerApi(commonServerImpl);
-    commonServerImpl.init();
 
     // Set cache for GitHub OAuth and add GitHub OAuth routes to our router.
     GitHubOAuthHandler.setCache(InMemoryCache());
     GitHubOAuthHandler.addRoutes(commonServerApi.router);
 
     pipeline = const Pipeline()
-        .addMiddleware(logRequests())
-        .addMiddleware(_createCustomCorsHeadersMiddleware());
+        .addMiddleware(logRequestsToLogger(_logger))
+        .addMiddleware(createCustomCorsHeadersMiddleware());
 
-    handler = pipeline.addHandler(commonServerApi.router);
+    handler = pipeline.addHandler(commonServerApi.router.call);
   }
 
-  Middleware _createCustomCorsHeadersMiddleware() {
-    return shelf_cors.createCorsHeadersMiddleware(corsHeaders: <String, String>{
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers':
-          'Origin, X-Requested-With, Content-Type, Accept, x-goog-api-client'
-    });
-  }
-}
-
-class _ServerContainer implements ServerContainer {
-  @override
-  String get version => '1.0';
+  Future<void> init() => commonServerImpl.init();
 }
 
 class _Cache implements ServerCache {

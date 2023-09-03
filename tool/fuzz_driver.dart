@@ -5,15 +5,13 @@
 /// This tool drives the services API with a large number of files and fuzz
 /// test variations. This should be run over all of the co19 tests in the SDK
 /// prior to each deployment of the server.
-
-library services.fuzz_driver;
+library;
 
 import 'dart:async';
 import 'dart:io' as io;
 import 'dart:math';
 
 import 'package:dart_services/src/analysis_server.dart' as analysis_server;
-import 'package:dart_services/src/common.dart';
 import 'package:dart_services/src/common_server_impl.dart';
 import 'package:dart_services/src/compiler.dart' as comp;
 import 'package:dart_services/src/protos/dart_services.pb.dart' as proto;
@@ -27,15 +25,14 @@ bool dumpPerf = false;
 bool dumpDelta = false;
 
 late CommonServerImpl commonServerImpl;
-late MockContainer container;
 late MockCache cache;
 analysis_server.AnalysisServerWrapper? analysisServer;
 
 late comp.Compiler compiler;
 
-var random = Random(0);
-var maxMutations = 2;
-var iterations = 5;
+Random random = Random(0);
+int maxMutations = 2;
+int iterations = 5;
 String commandToRun = 'ALL';
 bool dumpServerComms = false;
 
@@ -72,8 +69,6 @@ Usage: slow_test path_to_test_collection
   } else {
     fileEntities = [io.File(testCollectionRoot)];
   }
-
-  analysis_server.dumpServerMessages = false;
 
   var counter = 0;
   final sw = Stopwatch()..start();
@@ -122,9 +117,8 @@ Future<void> setupTools(Sdk sdk) async {
 
   print('SdKPath: ${sdk.dartSdkPath}');
 
-  container = MockContainer();
   cache = MockCache();
-  commonServerImpl = CommonServerImpl(container, cache, sdk);
+  commonServerImpl = CommonServerImpl(cache, sdk);
   await commonServerImpl.init();
 
   analysisServer =
@@ -192,7 +186,7 @@ Future<void> testPath(
           break;
 
         default:
-          throw 'Unknown command';
+          throw StateError('Unknown command: $commandToRun');
       }
     } catch (e, stacktrace) {
       print('===== FAILING OP: $lastExecuted, offset: $lastOffset  =====');
@@ -250,8 +244,7 @@ Future<num> testCompilation(String src, comp.Compiler compiler) async {
 
   lastOffset = null;
   if (serverBasedCall) {
-    final request = proto.CompileRequest();
-    request.source = src;
+    final request = proto.CompileRequest(source: src);
     await withTimeOut(commonServerImpl.compile(request));
   } else {
     await withTimeOut(compiler.compile(src));
@@ -384,11 +377,6 @@ String mutate(String src) {
   return newStr;
 }
 
-class MockContainer implements ServerContainer {
-  @override
-  String get version => vmVersion;
-}
-
 class MockCache implements ServerCache {
   @override
   Future<String?> get(String key) => Future<String?>.value(null);
@@ -412,8 +400,6 @@ enum OperationType {
   fixes,
   format
 }
-
-final int termWidth = io.stdout.hasTerminal ? io.stdout.terminalColumns : 200;
 
 void log(dynamic obj) {
   if (verbose) {

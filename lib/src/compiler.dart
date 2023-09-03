@@ -3,7 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 
 /// This library is a wrapper around the Dart to JavaScript (dart2js) compiler.
-library services.compiler;
+library;
 
 import 'dart:async';
 import 'dart:io';
@@ -67,13 +67,13 @@ class Compiler {
         sourcesFileList: files.keys.toList(), devMode: _sdk.devMode);
     if (unsupportedImports.isNotEmpty) {
       return CompilationResults(problems: [
-        for (var import in unsupportedImports)
+        for (final import in unsupportedImports)
           CompilationProblem._('unsupported import: ${import.uri.stringValue}'),
       ]);
     }
 
     final temp = await Directory.systemTemp.createTemp('dartpad');
-    _logger.info('Temp directory created: ${temp.path}');
+    _logger.fine('Temp directory created: ${temp.path}');
 
     try {
       await copyPath(_projectTemplates.dartPath, temp.path);
@@ -86,8 +86,9 @@ class Compiler {
         '--terse',
         if (!returnSourceMap) '--no-source-maps',
         '--packages=${path.join('.dart_tool', 'package_config.json')}',
-        '--sound-null-safety',
         '--enable-asserts',
+        if (_sdk.experiments.isNotEmpty)
+          '--enable-experiment=${_sdk.experiments.join(",")}',
         '-o',
         '$kMainDart.js',
         path.join('lib', kMainDart),
@@ -101,7 +102,7 @@ class Compiler {
       final mainJs = File(path.join(temp.path, '$kMainDart.js'));
       final mainSourceMap = File(path.join(temp.path, '$kMainDart.js.map'));
 
-      _logger.info('About to exec: $_dartPath ${arguments.join(' ')}');
+      _logger.fine('About to exec: $_dartPath ${arguments.join(' ')}');
 
       final result =
           await Process.run(_dartPath, arguments, workingDirectory: temp.path);
@@ -127,7 +128,7 @@ class Compiler {
       rethrow;
     } finally {
       await temp.delete(recursive: true);
-      _logger.info('temp folder removed: ${temp.path}');
+      _logger.fine('temp folder removed: ${temp.path}');
     }
   }
 
@@ -136,10 +137,11 @@ class Compiler {
     return compileFilesDDC({kMainDart: source});
   }
 
-  /// Compile the given set of source files and return the
-  /// resulting [DDCCompilationResults].
+  /// Compile the given set of source files and return the resulting
+  /// [DDCCompilationResults].
+  ///
   /// [files] is a map containing the source files in the format
-  ///   `{ "filename1":"sourcecode1" .. "filenameN":"sourcecodeN"}`
+  /// `{ "filename1":"sourcecode1" ... "filenameN":"sourcecodeN"}`.
   Future<DDCCompilationResults> compileFilesDDC(
       Map<String, String> files) async {
     if (files.isEmpty) {
@@ -152,13 +154,13 @@ class Compiler {
         sourcesFileList: files.keys.toList(), devMode: _sdk.devMode);
     if (unsupportedImports.isNotEmpty) {
       return DDCCompilationResults.failed([
-        for (var import in unsupportedImports)
+        for (final import in unsupportedImports)
           CompilationProblem._('unsupported import: ${import.uri.stringValue}'),
       ]);
     }
 
     final temp = await Directory.systemTemp.createTemp('dartpad');
-    _logger.info('Temp directory created: ${temp.path}');
+    _logger.fine('Temp directory created: ${temp.path}');
 
     try {
       final usingFlutter = usesFlutterWeb(imports, devMode: _sdk.devMode);
@@ -184,6 +186,7 @@ class Compiler {
 
       final arguments = <String>[
         '--modules=amd',
+        '--no-summarize',
         if (usingFlutter) ...[
           '-s',
           _projectTemplates.summaryFilePath,
@@ -193,14 +196,15 @@ class Compiler {
         ...['-o', path.join(temp.path, '$kMainDart.js')],
         ...['--module-name', 'dartpad_main'],
         '--enable-asserts',
-        '--sound-null-safety',
+        if (_sdk.experiments.isNotEmpty)
+          '--enable-experiment=${_sdk.experiments.join(",")}',
         bootstrapPath,
         '--packages=${path.join(temp.path, '.dart_tool', 'package_config.json')}',
       ];
 
       final mainJs = File(path.join(temp.path, '$kMainDart.js'));
 
-      _logger.info('About to exec dartdevc worker: ${arguments.join(' ')}"');
+      _logger.fine('About to exec dartdevc worker: ${arguments.join(' ')}"');
 
       final response =
           await _ddcDriver.doWork(WorkRequest()..arguments.addAll(arguments));
@@ -230,7 +234,70 @@ class Compiler {
       rethrow;
     } finally {
       await temp.delete(recursive: true);
-      _logger.info('temp folder removed: ${temp.path}');
+      _logger.fine('temp folder removed: ${temp.path}');
+    }
+  }
+
+  /// Compile the given source file and return the resulting
+  /// [FlutterBuildResults].
+  Future<FlutterBuildResults> flutterBuild(String source) async {
+    final unsupportedImports = getUnsupportedImports(getAllImportsFor(source));
+    if (unsupportedImports.isNotEmpty) {
+      final message =
+          unsupportedImports.map((import) => import.uri.stringValue).join('\n');
+      return FlutterBuildResults.failed(message);
+    }
+
+    // TODO: Recycle this project directory.
+    final tempDir = await Directory.systemTemp.createTemp('dartpad');
+
+    try {
+      await copyPath(_projectTemplates.flutterPath, tempDir.path);
+
+      // Update lib/main.dart.
+      final sourceFile = File(path.join(tempDir.path, 'lib', kMainDart));
+      sourceFile.parent.createSync();
+      sourceFile.writeAsStringSync(source);
+
+      final arguments = <String>[
+        'build',
+        'web',
+
+        // This disables minification.
+        '--dart2js-optimization=O1',
+
+        // With the web renderer, we don't need to load other (skiawasm) resources.
+        // TODO(devoncarew): Look into use the skiawasm backend.
+        '--web-renderer=html',
+
+        // This disables the service worker / caching path.
+        '--pwa-strategy=none',
+
+        '--no-tree-shake-icons',
+
+        if (_sdk.experiments.isNotEmpty)
+          '--enable-experiment=${_sdk.experiments.join(",")}',
+      ];
+
+      // TODO: Serialize this request - only one can run at a time.
+      final result = await Process.run(
+        _sdk.flutterToolPath,
+        arguments,
+        workingDirectory: tempDir.path,
+      );
+
+      if (result.exitCode != 0) {
+        return FlutterBuildResults.failed(
+            '${result.stdout}\n${result.stderr}'.trim());
+      }
+
+      // Return the compiled build/web/main.dart.js file.
+      final jsOutFile =
+          File(path.join(tempDir.path, 'build', 'web', 'main.dart.js'));
+      return FlutterBuildResults.success(
+          compiledJavaScript: jsOutFile.readAsStringSync());
+    } finally {
+      await tempDir.delete(recursive: true);
     }
   }
 
@@ -284,6 +351,21 @@ class DDCCompilationResults {
   String toString() => success
       ? 'CompilationResults: Success'
       : 'Compilation errors: ${problems.join('\n')}';
+}
+
+class FlutterBuildResults {
+  final String? compiledJavaScript;
+  final String? compilationIssues;
+
+  FlutterBuildResults.success({required this.compiledJavaScript})
+      : compilationIssues = null;
+
+  FlutterBuildResults.failed(this.compilationIssues)
+      : compiledJavaScript = null;
+
+  bool get hasOutput => compiledJavaScript != null;
+
+  bool get success => compilationIssues == null;
 }
 
 /// An issue associated with [CompilationResults].

@@ -77,11 +77,8 @@ const Set<String> firebasePackages = {
 
 /// The set of supported Flutter-oriented packages.
 Set<String> supportedFlutterPackages({required bool devMode}) => {
-      'flutter_lints',
-      'flutter_riverpod',
-      'google_fonts',
-      'provider',
-      'english_words',
+      'animations',
+      'creator',
       'firebase_analytics',
       'firebase_database',
       'firebase_messaging',
@@ -91,18 +88,21 @@ Set<String> supportedFlutterPackages({required bool devMode}) => {
       'flame_forge2d',
       'flame_splash_screen',
       'flame_tiled',
-      'go_router',
-      'basics',
-      'flutter_processing',
-      'quiver',
-      'yaml',
-      'yaml_edit',
-      'tuple',
-      'animations',
-      'equatable',
-      'matcher',
+      'flutter_adaptive_scaffold',
+      'flutter_bloc',
+      'flutter_hooks',
+      'flutter_lints',
       'flutter_map',
-      'petitparser',
+      'flutter_processing',
+      'flutter_riverpod',
+      'flutter_svg',
+      'go_router',
+      'google_fonts',
+      'hooks_riverpod',
+      'provider',
+      'riverpod_navigator',
+      'shared_preferences',
+      'video_player',
       if (devMode) ...[],
     };
 
@@ -116,20 +116,36 @@ Set<String> _packagesIndicatingFlutter({required bool devMode}) => {
 
 /// The set of basic Dart (non-Flutter) packages which can be directly imported
 /// into a script.
-const Set<String> supportedBasicDartPackages = {
-  'bloc',
-  'characters',
-  'collection',
-  'http',
-  'intl',
-  'js',
-  'lints',
-  'meta',
-  'path',
-  'riverpod',
-  'rxdart',
-  'vector_math',
-};
+Set<String> supportedBasicDartPackages({required bool devMode}) => {
+      'basics',
+      'bloc',
+      'characters',
+      'collection',
+      'cross_file',
+      'dartz',
+      'english_words',
+      'equatable',
+      'fast_immutable_collections',
+      'http',
+      'intl',
+      'js',
+      'lints',
+      'matcher',
+      'meta',
+      'path',
+      'petitparser',
+      'quiver',
+      'riverpod',
+      'rohd',
+      'rohd_vf',
+      'rxdart',
+      'timezone',
+      'tuple',
+      'vector_math',
+      'yaml',
+      'yaml_edit',
+      if (devMode) ...[]
+    };
 
 /// A set of all allowed `dart:` imports. Currently includes non-VM libraries
 /// listed as the [doc](https://api.dart.dev/stable/index.html) categories.
@@ -192,15 +208,15 @@ String? _packageNameFromPackageUri(String uriString) {
 /// be allowed).
 /// Note: The filenames in [sourcesFileList] were sanitized of any
 /// 'package:'/etc syntax as the file set arrives from the endpoint,
-/// and before being passed to [getUnsuppotedImports].
+/// and before being passed to [getUnsupportedImports].
 /// This is done so the list can't be used to bypass unsupported imports.
 /// The function [sanitizeAndCheckFilenames()] was used to sanitize the
 /// filenames.
 List<ImportDirective> getUnsupportedImports(List<ImportDirective> imports,
-    {List<String>? sourcesFileList, required bool devMode}) {
+    {List<String>? sourcesFileList, bool devMode = false}) {
   return imports.where((import) {
     final uriString = import.uri.stringValue;
-    if (uriString == null) {
+    if (uriString == null || uriString.isEmpty) {
       return false;
     }
     // All non-VM 'dart:' imports are ok.
@@ -232,4 +248,4 @@ List<ImportDirective> getUnsupportedImports(List<ImportDirective> imports,
 
 bool isSupportedPackage(String package, {required bool devMode}) =>
     _packagesIndicatingFlutter(devMode: devMode).contains(package) ||
-    supportedBasicDartPackages.contains(package);
+    supportedBasicDartPackages(devMode: devMode).contains(package);

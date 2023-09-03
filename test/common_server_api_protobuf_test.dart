@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.common_server_api_protobuf_test;
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -57,7 +55,7 @@ void defineTests() {
       request.add(utf8.encode(json.encode(message.toProto3Json())));
     }
     await request.close();
-    await shelf_io.handleRequest(request, commonServerApi.router);
+    await shelf_io.handleRequest(request, commonServerApi.router.call);
     return request.response;
   }
 
@@ -68,17 +66,16 @@ void defineTests() {
     final request = MockHttpRequest('GET', uri);
     request.headers.add('content-type', jsonContentType);
     await request.close();
-    await shelf_io.handleRequest(request, commonServerApi.router);
+    await shelf_io.handleRequest(request, commonServerApi.router.call);
     return request.response;
   }
 
   group('CommonServerProto JSON', () {
+    final sdk =
+        Sdk.create(Platform.environment['FLUTTER_CHANNEL'] ?? stableChannel);
     setUpAll(() async {
-      final container = MockContainer();
       final cache = MockCache();
-      final channel = Platform.environment['FLUTTER_CHANNEL'] ?? stableChannel;
-      final sdk = Sdk.create(channel);
-      commonServerImpl = CommonServerImpl(container, cache, sdk);
+      commonServerImpl = CommonServerImpl(cache, sdk);
       commonServerApi = CommonServerApi(commonServerImpl);
       await commonServerImpl.init();
 
@@ -167,6 +164,7 @@ void defineTests() {
       final request = proto.CompileRequest()..source = sampleCode;
       final response =
           await sendPostRequest('dartservices/v2/compile', request);
+
       expect(response.statusCode, 200);
       final data = json.decode(await response.transform(utf8.decoder).join());
       final reply = proto.CompileResponse()..mergeFromProto3Json(data);
@@ -378,7 +376,11 @@ main() {
       final data = json.decode(await response.transform(utf8.decoder).join());
       final reply = proto.AssistsResponse()..mergeFromProto3Json(data);
       final assists = reply.assists;
-      expect(assists, hasLength(2));
+      if (sdk.oldChannel) {
+        expect(assists, hasLength(2));
+      } else {
+        expect(assists, hasLength(3));
+      }
       expect(assists.first.edits, isNotNull);
       expect(assists.first.edits, hasLength(1));
       expect(
@@ -393,7 +395,7 @@ main() {
       final encoded = await response.transform(utf8.decoder).join();
       final data = json.decode(encoded) as Map<String, dynamic>;
       expect(data['sdkVersion'], isNotNull);
-      expect(data['runtimeVersion'], isNotNull);
+      expect(data['flutterVersion'], isNotNull);
     });
 
     test('version', () async {
@@ -402,19 +404,18 @@ main() {
       final encoded = await response.transform(utf8.decoder).join();
       final data = json.decode(encoded) as Map<String, dynamic>;
       expect(data['sdkVersion'], isNotNull);
-      expect(data['runtimeVersion'], isNotNull);
+      expect(data['flutterVersion'], isNotNull);
     });
   });
 
   //-----------------------------------------------------------------
   // Beginning of multi file files={} group tests:
   group('CommonServerProto JSON Multi File Group files={}', () {
+    final sdk =
+        Sdk.create(Platform.environment['FLUTTER_CHANNEL'] ?? stableChannel);
     setUpAll(() async {
-      final container = MockContainer();
       final cache = MockCache();
-      final channel = Platform.environment['FLUTTER_CHANNEL'] ?? stableChannel;
-      final sdk = Sdk.create(channel);
-      commonServerImpl = CommonServerImpl(container, cache, sdk);
+      commonServerImpl = CommonServerImpl(cache, sdk);
       commonServerApi = CommonServerApi(commonServerImpl);
       await commonServerImpl.init();
 
@@ -451,7 +452,8 @@ main() {
     tearDown(log.clearListeners);
 
     test('analyzeFiles Dart files={}', () async {
-      final request = proto.SourceFilesRequest(files: {kMainDart: sampleCode});
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: sampleCode});
       final response =
           await sendPostRequest('dartservices/v2/analyzeFiles', request);
       expect(response.statusCode, 200);
@@ -462,8 +464,8 @@ main() {
     });
 
     test('analyzeFiles Flutter files={}', () async {
-      final request =
-          proto.SourceFilesRequest(files: {kMainDart: sampleCodeFlutter});
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: sampleCodeFlutter});
       final response =
           await sendPostRequest('dartservices/v2/analyzeFiles', request);
       expect(response.statusCode, 200);
@@ -474,8 +476,8 @@ main() {
     });
 
     test('analyzeFiles errors files={}', () async {
-      final request =
-          proto.SourceFilesRequest(files: {kMainDart: sampleCodeError});
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: sampleCodeError});
       late proto.AnalysisResults reply;
       final response =
           await sendPostRequest('dartservices/v2/analyzeFiles', request);
@@ -502,7 +504,8 @@ main() {
     });
 
     test('compileFiles files={}', () async {
-      final request = proto.CompileFilesRequest(files: {kMainDart: sampleCode});
+      final request = proto.CompileFilesRequest()
+        ..files.addAll({kMainDart: sampleCode});
       final response =
           await sendPostRequest('dartservices/v2/compileFiles', request);
       expect(response.statusCode, 200);
@@ -512,10 +515,12 @@ main() {
     });
 
     test('compileFiles 2 simple import files set in files={}', () async {
-      final request = proto.CompileFilesRequest(files: {
-        kMainDart: sampleCodeMultiFoo,
-        'bar.dart': sampleCodeMultiBar,
-      }, returnSourceMap: false);
+      final request = proto.CompileFilesRequest()
+        ..files.addAll({
+          kMainDart: sampleCodeMultiFoo,
+          'bar.dart': sampleCodeMultiBar,
+        })
+        ..returnSourceMap = false;
       final response =
           await sendPostRequest('dartservices/v2/compileFiles', request);
       expect(response.statusCode, 200);
@@ -525,8 +530,8 @@ main() {
     });
 
     test('compileFiles error files={}', () async {
-      final request =
-          proto.CompileFilesRequest(files: {kMainDart: sampleCodeError});
+      final request = proto.CompileFilesRequest()
+        ..files.addAll({kMainDart: sampleCodeError});
       final response =
           await sendPostRequest('dartservices/v2/compileFiles', request);
       expect(response.statusCode, 400);
@@ -543,8 +548,8 @@ main() {
     });
 
     test('compileFilesDDC mymain.dart files={}', () async {
-      final request =
-          proto.CompileFilesDDCRequest(files: {'mymain.dart': sampleCode});
+      final request = proto.CompileFilesDDCRequest()
+        ..files.addAll({'mymain.dart': sampleCode});
       final response =
           await sendPostRequest('dartservices/v2/compileFilesDDC', request);
       expect(response.statusCode, 200);
@@ -554,11 +559,12 @@ main() {
     });
 
     test('compileFilesDDC 3 files set in files={}', () async {
-      final request = proto.CompileFilesDDCRequest(files: {
-        kMainDart: sampleCode3PartLibraryMain,
-        'discdata.dart': sampleCode3PartDiscDataPartOfTestAnim,
-        'various.dart': sampleCode3PartVariousPartOfTestAnim
-      });
+      final request = proto.CompileFilesDDCRequest()
+        ..files.addAll({
+          kMainDart: sampleCode3PartLibraryMain,
+          'discdata.dart': sampleCode3PartDiscDataPartOfTestAnim,
+          'various.dart': sampleCode3PartVariousPartOfTestAnim
+        });
       final response =
           await sendPostRequest('dartservices/v2/compileFilesDDC', request);
       expect(response.statusCode, 200);
@@ -568,10 +574,10 @@ main() {
     });
 
     test('completeFiles files={}', () async {
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: 'void main() {print("foo");}'},
-          activeSourceName: kMainDart,
-          offset: 1);
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: 'void main() {print("foo");}'})
+        ..activeSourceName = kMainDart
+        ..offset = 1;
       final response =
           await sendPostRequest('dartservices/v2/completeFiles', request);
       expect(response.statusCode, 200);
@@ -587,7 +593,7 @@ main() {
     });
 
     test('completeFiles param missing files={}', () async {
-      final request = proto.SourceFilesRequest(offset: 1);
+      final request = proto.SourceFilesRequest()..offset = 1;
       final response =
           await sendPostRequest('dartservices/v2/completeFiles', request);
       expect(response.statusCode, 400);
@@ -597,8 +603,8 @@ main() {
     });
 
     test('completeFiles param missing 2 files={}', () async {
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: 'void main() {print("foo");}'});
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: 'void main() {print("foo");}'});
       final response =
           await sendPostRequest('dartservices/v2/completeFiles', request);
       expect(response.statusCode, 400);
@@ -608,10 +614,10 @@ main() {
     });
 
     test('documentFiles files={}', () async {
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: 'void main() {print("foo");}'},
-          activeSourceName: kMainDart,
-          offset: 17);
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: 'void main() {print("foo");}'})
+        ..activeSourceName = kMainDart
+        ..offset = 17;
       final response =
           await sendPostRequest('dartservices/v2/documentFiles', request);
       expect(response.statusCode, 200);
@@ -621,10 +627,10 @@ main() {
     });
 
     test('documentFiles little data files={}', () async {
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: 'void main() {print("foo");}'},
-          activeSourceName: kMainDart,
-          offset: 2);
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: 'void main() {print("foo");}'})
+        ..activeSourceName = kMainDart
+        ..offset = 2;
       final response =
           await sendPostRequest('dartservices/v2/documentFiles', request);
       expect(response.statusCode, 200);
@@ -634,10 +640,10 @@ main() {
     });
 
     test('documentFiles no data files={}', () async {
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: 'void main() {print("foo");}'},
-          activeSourceName: kMainDart,
-          offset: 12);
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: 'void main() {print("foo");}'})
+        ..activeSourceName = kMainDart
+        ..offset = 12;
       final response =
           await sendPostRequest('dartservices/v2/documentFiles', request);
       expect(response.statusCode, 200);
@@ -647,7 +653,7 @@ main() {
     });
 
     test('documentFiles negative-test noSource files={}', () async {
-      final request = proto.SourceFilesRequest(offset: 12);
+      final request = proto.SourceFilesRequest()..offset = 12;
       final response =
           await sendPostRequest('dartservices/v2/documentFiles', request);
       expect(response.statusCode, 400);
@@ -655,8 +661,8 @@ main() {
 
     test('documentFiles negative-test noActiveSource noOffset files={}',
         () async {
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: 'void main() {print("foo");}'});
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: 'void main() {print("foo");}'});
       final response =
           await sendPostRequest('dartservices/v2/documentFiles', request);
       expect(response.statusCode, 400);
@@ -669,10 +675,10 @@ void main() {
   int i = 0;
 }
 ''';
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: quickFixesCode},
-          activeSourceName: kMainDart,
-          offset: 10);
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: quickFixesCode})
+        ..activeSourceName = kMainDart
+        ..offset = 10;
       final response =
           await sendPostRequest('dartservices/v2/fixesFiles', request);
       expect(response.statusCode, 200);
@@ -685,15 +691,18 @@ void main() {
     });
 
     test('fixesFiles completeness files={}', () async {
-      final request = proto.SourceFilesRequest(files: {
-        kMainDart: '''
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({
+          kMainDart: '''
 void main() {
   for (int i = 0; i < 4; i++) {
     print('hello \$i')
   }
 }
 '''
-      }, activeSourceName: kMainDart, offset: 67);
+        })
+        ..activeSourceName = kMainDart
+        ..offset = 67;
       final response =
           await sendPostRequest('dartservices/v2/fixesFiles', request);
       expect(response.statusCode, 200);
@@ -714,17 +723,21 @@ main() {
   int v = 0;
 }
 ''';
-      final request = proto.SourceFilesRequest(
-          files: {kMainDart: assistCode},
-          activeSourceName: kMainDart,
-          offset: 15);
+      final request = proto.SourceFilesRequest()
+        ..files.addAll({kMainDart: assistCode})
+        ..activeSourceName = kMainDart
+        ..offset = 15;
       final response =
           await sendPostRequest('dartservices/v2/assistsFiles', request);
       expect(response.statusCode, 200);
       final data = json.decode(await response.transform(utf8.decoder).join());
       final reply = proto.AssistsResponse()..mergeFromProto3Json(data);
       final assists = reply.assists;
-      expect(assists, hasLength(2));
+      if (sdk.oldChannel) {
+        expect(assists, hasLength(2));
+      } else {
+        expect(assists, hasLength(3));
+      }
       expect(assists.first.edits, isNotNull);
       expect(assists.first.edits, hasLength(1));
       expect(
@@ -734,11 +747,6 @@ main() {
     });
   });
   // End of multi file files={} tests group.
-}
-
-class MockContainer implements ServerContainer {
-  @override
-  String get version => vmVersion;
 }
 
 class MockCache implements ServerCache {

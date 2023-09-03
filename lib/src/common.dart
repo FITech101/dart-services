@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.common;
-
 import 'dart:io';
 
 const kMainDart = 'main.dart';
@@ -121,7 +119,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             Text(
               '$_counter',
-              style: Theme.of(context).textTheme.headline4,
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
           ],
         ),
@@ -141,7 +139,7 @@ const sampleCodeFlutterSunflower = r'''
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-final Color primaryColor = Colors.orange;
+const Color primaryColor = Colors.orange;
 const TargetPlatform platform = TargetPlatform.android;
 
 void main() {
@@ -835,10 +833,10 @@ String sanitizeAndCheckFilenames(Map<String, String> sources,
     [String activeSourceName = kMainDart]) {
   activeSourceName = _sanitizeFileName(activeSourceName);
 
-  final List<_SourcesGroupFile> files =
+  final files =
       sources.entries.map((e) => _SourcesGroupFile(e.key, e.value)).toList();
 
-  bool foundKMain = false;
+  var foundKMain = false;
   // Check for kMainDart file and also sanitize filenames.
   for (final sourceFile in files) {
     sourceFile.filename = _sanitizeFileName(sourceFile.filename);
@@ -883,7 +881,7 @@ String sanitizeAndCheckFilenames(Map<String, String> sources,
 
 /// Count the total lines across all files in [sources] file map.
 int countLines(Map<String, String> sources) {
-  int totalLines = 0;
+  var totalLines = 0;
   for (final filename in sources.keys) {
     totalLines += countLinesInString(sources[filename]!);
   }
@@ -891,25 +889,25 @@ int countLines(Map<String, String> sources) {
 }
 
 // Character constants.
-const int _lf = 10;
-const int _cr = 13;
+const int $lf = 10;
+const int $cr = 13;
 
 /// Count lines in string (CR, LF or CR-LF can be line separators).
 /// (Gives correct result as opposed to .split('\n').length, which
 /// reports 1 extra line in many cases, and this does so without the
 /// extra work .split() would do by creating the list of copied strings).
 int countLinesInString(String str) {
-  final List<int> data = str.codeUnits;
-  int lines = 0;
-  final int end = data.length;
-  int sliceStart = 0;
-  int char = 0;
-  for (int i = 0; i < end; i++) {
-    final int previousChar = char;
+  final data = str.codeUnits;
+  var lines = 0;
+  final end = data.length;
+  var sliceStart = 0;
+  var char = 0;
+  for (var i = 0; i < end; i++) {
+    final previousChar = char;
     char = data[i];
-    if (char != _cr) {
-      if (char != _lf) continue;
-      if (previousChar == _cr) {
+    if (char != $cr) {
+      if (char != $lf) continue;
+      if (previousChar == $cr) {
         sliceStart = i + 1;
         continue;
       }

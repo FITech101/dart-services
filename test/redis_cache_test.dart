@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.redis_cache_test;
-
 import 'dart:async';
 import 'dart:io';
 
@@ -14,9 +12,12 @@ import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:test/test.dart';
 
-void main() => defineTests();
+void main() async {
+  final hasRedis = await hasRedisServer();
+  defineTests(hasRedis);
+}
 
-void defineTests() {
+void defineTests(bool hasRedis) {
   /// Integration tests for the RedisCache implementation.
   ///
   /// We basically assume that redis and dartis work correctly -- this is
@@ -55,7 +56,6 @@ void defineTests() {
       sdk = Sdk.create(channel);
       log.onRecord.listen((LogRecord rec) {
         logMessages.add('${rec.level.name}: ${rec.time}: ${rec.message}');
-        print(logMessages.last);
       });
       redisCache = RedisCache('redis://localhost:9501', sdk, 'aversion');
       redisCacheAlt = RedisCache('redis://localhost:9501', sdk, 'bversion');
@@ -149,7 +149,7 @@ void defineTests() {
         try {
           // Wait for a retry message.
           while (logMessages.length < 2) {
-            await (Future<void>.delayed(Duration(milliseconds: 50)));
+            await Future<void>.delayed(Duration(milliseconds: 50));
           }
           expect(
               logMessages.join('\n'),
@@ -233,5 +233,17 @@ void defineTests() {
         }
       });
     });
-  });
+  }, skip: hasRedis ? null : 'redis-server not installed');
+}
+
+Future<bool> hasRedisServer() async {
+  // redis-server --version
+  // "Redis server v=7.2.0 sha=00000000:0 malloc=libc bits=64 build=d50c69ff806e6ad2"
+
+  try {
+    final result = await Process.run('redis-server', ['--version']);
+    return result.exitCode == 0;
+  } catch (e) {
+    return false;
+  }
 }

@@ -27,25 +27,49 @@ class Sdk {
 
   final String flutterVersion;
 
+  /// The current version of the Flutter engine
+  final String engineVersion;
+
   /// The current version of the SDK, not including any `-dev` suffix.
   final String version;
 
   /// Is this SDK being used in development mode. True if channel is `dev`.
-  final bool devMode;
+  bool get devMode => _channel == 'dev';
 
   /// Is this the old channel
-  final bool oldChannel;
+  bool get oldChannel => _channel == 'old';
+
+  /// Is this the stable channel
+  bool get stableChannel => _channel == 'stable';
+
+  /// Is this the beta channel
+  bool get betaChannel => _channel == 'beta';
+
+  /// Is this the master channel
+  bool get masterChannel => _channel == 'master';
+
+  // Which channel is this SDK?
+  final String _channel;
+
+  /// Experiments that this SDK is configured with
+  List<String> get experiments {
+    if (masterChannel) return const ['inline-class'];
+    return const [];
+  }
 
   factory Sdk.create(String channel) {
     final sdkPath = path.join(Sdk._flutterSdksPath, channel);
     final flutterBinPath = path.join(sdkPath, 'bin');
     final dartSdkPath = path.join(flutterBinPath, 'cache', 'dart-sdk');
+    final engineVersionPath =
+        path.join(flutterBinPath, 'internal', 'engine.version');
     return _instance ??= Sdk._(
       sdkPath: sdkPath,
       flutterBinPath: flutterBinPath,
       dartSdkPath: dartSdkPath,
       versionFull: _readVersionFile(dartSdkPath),
       flutterVersion: _readVersionFile(sdkPath),
+      engineVersion: _readFile(engineVersionPath),
       channel: channel,
     );
   }
@@ -56,29 +80,30 @@ class Sdk {
     required this.dartSdkPath,
     required this.versionFull,
     required this.flutterVersion,
+    required this.engineVersion,
     required String channel,
   })  : _flutterBinPath = flutterBinPath,
+        _channel = channel,
         version = versionFull.contains('-')
             ? versionFull.substring(0, versionFull.indexOf('-'))
-            : versionFull,
-        devMode = channel == 'dev',
-        oldChannel = channel == 'old';
+            : versionFull;
 
   /// The path to the 'flutter' tool (binary).
   String get flutterToolPath => path.join(_flutterBinPath, 'flutter');
 
-  String get flutterWebSdkPath => path.join(
-      _flutterBinPath, 'cache', 'flutter_web_sdk', 'flutter_web_sdk', 'kernel');
+  String get flutterWebSdkPath {
+    return path.join(_flutterBinPath, 'cache', 'flutter_web_sdk', 'kernel');
+  }
 
   static String _readVersionFile(String filePath) =>
-      (File(path.join(filePath, 'version')).readAsStringSync()).trim();
+      _readFile(path.join(filePath, 'version'));
 
   /// Get the path to the Flutter SDKs.
   static String get _flutterSdksPath =>
       path.join(Directory.current.path, 'flutter-sdks');
 }
 
-const channels = ['stable', 'beta', 'dev', 'old', 'master'];
+const channels = ['stable', 'beta', 'dev', 'old', 'main'];
 
 class DownloadingSdkManager {
   final String channel;
@@ -179,58 +204,43 @@ class _DownloadedFlutterSdk {
 
   String get sdkPath => path.join(flutterSdkPath, 'bin', 'cache', 'dart-sdk');
 
-  String get versionFull =>
-      File(path.join(sdkPath, 'version')).readAsStringSync().trim();
+  String get versionFull => _readFile(path.join(sdkPath, 'version'));
 
-  String get flutterVersion =>
-      File(path.join(flutterSdkPath, 'version')).readAsStringSync().trim();
+  String get flutterVersion => _readFile(path.join(flutterSdkPath, 'version'));
 
   /// Perform a git clone, logging the command and any output, and throwing an
   /// exception if there are any issues with the clone.
   Future<void> clone(List<String> args, {required String cwd}) async {
-    final result = await _execLog('git', ['clone', ...args], cwd);
-    if (result != 0) {
-      throw 'result from git clone: $result';
-    }
+    await _execLog('git', ['clone', ...args], cwd, throwOnError: true);
   }
 
   Future<void> checkout(String branch) async {
-    final result = await _execLog('git', ['checkout', branch], flutterSdkPath);
-    if (result != 0) {
-      throw 'result from git checkout: $result';
-    }
+    await _execLog('git', ['checkout', branch], flutterSdkPath,
+        throwOnError: true);
   }
 
   Future<void> fetchTags() async {
-    final result = await _execLog('git', ['fetch', '--tags'], flutterSdkPath);
-    if (result != 0) {
-      throw 'result from git fetch: $result';
-    }
+    await _execLog('git', ['fetch', '--tags'], flutterSdkPath,
+        throwOnError: true);
   }
 
   Future<void> pull() async {
-    final result = await _execLog('git', ['pull'], flutterSdkPath);
-    if (result != 0) {
-      throw 'result from git pull: $result';
-    }
+    await _execLog('git', ['pull'], flutterSdkPath, throwOnError: true);
   }
 
   Future<void> trackChannel(String channel) async {
     // git checkout --track -b beta origin/beta
-    final result = await _execLog(
-      'git',
-      [
-        'checkout',
-        '--track',
-        '-b',
-        channel,
-        'origin/$channel',
-      ],
-      flutterSdkPath,
-    );
-    if (result != 0) {
-      throw 'result from git checkout $channel: $result';
-    }
+    await _execLog(
+        'git',
+        [
+          'checkout',
+          '--track',
+          '-b',
+          channel,
+          'origin/$channel',
+        ],
+        flutterSdkPath,
+        throwOnError: true);
   }
 
   Future<bool> checkChannelAvailableLocally(String channel) async {
@@ -250,7 +260,11 @@ class _DownloadedFlutterSdk {
   }
 
   Future<int> _execLog(
-      String executable, List<String> arguments, String cwd) async {
+    String executable,
+    List<String> arguments,
+    String cwd, {
+    bool throwOnError = false,
+  }) async {
     print('$executable ${arguments.join(' ')}');
 
     final process = await Process.start(
@@ -265,6 +279,16 @@ class _DownloadedFlutterSdk {
         .transform<String>(utf8.decoder)
         .listen((string) => stderr.write(string));
 
-    return await process.exitCode;
+    final code = await process.exitCode;
+    if (throwOnError && code != 0) {
+      throw ProcessException(
+          executable,
+          arguments,
+          'Error running ${[executable, ...arguments].take(2).join(' ')}',
+          code);
+    }
+    return code;
   }
 }
+
+String _readFile(String filePath) => File(filePath).readAsStringSync().trim();

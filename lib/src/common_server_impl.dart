@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.common_server_impl;
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -11,8 +9,7 @@ import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:logging/logging.dart';
 
-import '../version.dart';
-import 'analysis_servers.dart';
+import 'analyzer_wrapper.dart';
 import 'common.dart';
 import 'compiler.dart';
 import 'project.dart';
@@ -25,48 +22,32 @@ const Duration _standardExpiration = Duration(hours: 1);
 final Logger log = Logger('common_server');
 
 class BadRequest implements Exception {
-  String cause;
+  final String cause;
 
   BadRequest(this.cause);
 }
 
-abstract class ServerContainer {
-  String get version;
-}
-
 class CommonServerImpl {
-  final ServerContainer _container;
   final ServerCache _cache;
   final Sdk _sdk;
 
   late Compiler _compiler;
-  late AnalysisServersWrapper _analysisServers;
+  late AnalyzerWrapper _analysisServer;
 
-  // Restarting and health status of the two Analysis Servers
-  bool get isRestarting => _analysisServers.isRestarting;
-  bool get isHealthy => _analysisServers.isHealthy;
-
-  CommonServerImpl(
-    this._container,
-    this._cache,
-    this._sdk,
-  ) {
-    hierarchicalLoggingEnabled = true;
-    log.level = Level.ALL;
-  }
+  CommonServerImpl(this._cache, this._sdk);
 
   Future<void> init() async {
-    log.info('Beginning CommonServer init().');
-    _analysisServers = AnalysisServersWrapper(_sdk.dartSdkPath);
+    log.fine('initing CommonServerImpl');
+
     _compiler = Compiler(_sdk);
 
-    await _compiler.warmup();
-    await _analysisServers.warmup();
+    _analysisServer = AnalyzerWrapper(_sdk.dartSdkPath);
+    await _analysisServer.init();
   }
 
   Future<dynamic> shutdown() {
     return Future.wait(<Future<dynamic>>[
-      _analysisServers.shutdown(),
+      _analysisServer.shutdown(),
       _compiler.dispose(),
       Future<dynamic>.sync(_cache.shutdown)
     ]).timeout(const Duration(minutes: 1));
@@ -77,7 +58,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'source\'');
     }
 
-    return _analysisServers.analyze(request.source, devMode: _sdk.devMode);
+    return _analysisServer.analyze(request.source, devMode: _sdk.devMode);
   }
 
   Future<proto.CompileResponse> compile(proto.CompileRequest request) {
@@ -97,6 +78,16 @@ class CommonServerImpl {
     return _compileDDC({kMainDart: request.source});
   }
 
+  Future<proto.FlutterBuildResponse> flutterBuild(
+    proto.FlutterBuildRequest request,
+  ) {
+    if (!request.hasSource()) {
+      throw BadRequest('Missing parameter: \'source\'');
+    }
+
+    return _flutterBuild(source: request.source);
+  }
+
   Future<proto.CompleteResponse> complete(proto.SourceRequest request) {
     if (!request.hasSource()) {
       throw BadRequest('Missing parameter: \'source\'');
@@ -105,7 +96,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'offset\'');
     }
 
-    return _analysisServers.complete(request.source, request.offset,
+    return _analysisServer.complete(request.source, request.offset,
         devMode: _sdk.devMode);
   }
 
@@ -117,7 +108,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'offset\'');
     }
 
-    return _analysisServers.getFixes(request.source, request.offset,
+    return _analysisServer.getFixes(request.source, request.offset,
         devMode: _sdk.devMode);
   }
 
@@ -129,7 +120,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'offset\'');
     }
 
-    return _analysisServers.getAssists(request.source, request.offset,
+    return _analysisServer.getAssists(request.source, request.offset,
         devMode: _sdk.devMode);
   }
 
@@ -138,7 +129,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'source\'');
     }
 
-    return _analysisServers.format(request.source, request.offset,
+    return _analysisServer.format(request.source, request.offset,
         devMode: _sdk.devMode);
   }
 
@@ -151,7 +142,7 @@ class CommonServerImpl {
     }
 
     return proto.DocumentResponse()
-      ..info.addAll(await _analysisServers
+      ..info.addAll(await _analysisServer
           .dartdoc(request.source, request.offset, devMode: _sdk.devMode));
   }
 
@@ -161,8 +152,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'files\'');
     }
 
-    return _analysisServers.analyzeFiles(
-        request.files, request.activeSourceName,
+    return _analysisServer.analyzeFiles(request.files, request.activeSourceName,
         devMode: _sdk.devMode);
   }
 
@@ -197,7 +187,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'offset\'');
     }
 
-    return _analysisServers.completeFiles(
+    return _analysisServer.completeFiles(
         request.files, request.activeSourceName, request.offset,
         devMode: _sdk.devMode);
   }
@@ -213,7 +203,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'offset\'');
     }
 
-    return _analysisServers.getFixesMulti(
+    return _analysisServer.getFixesMulti(
         request.files, request.activeSourceName, request.offset,
         devMode: _sdk.devMode);
   }
@@ -229,7 +219,7 @@ class CommonServerImpl {
       throw BadRequest('Missing parameter: \'offset\'');
     }
 
-    return _analysisServers.getAssistsMulti(
+    return _analysisServer.getAssistsMulti(
         request.files, request.activeSourceName, request.offset,
         devMode: _sdk.devMode);
   }
@@ -247,7 +237,7 @@ class CommonServerImpl {
     }
 
     return proto.DocumentResponse()
-      ..info.addAll(await _analysisServers.dartdocMulti(
+      ..info.addAll(await _analysisServer.dartdocMulti(
           request.files, request.activeSourceName, request.offset,
           devMode: _sdk.devMode));
   }
@@ -256,7 +246,7 @@ class CommonServerImpl {
   Future<proto.VersionResponse> version(proto.VersionRequest _) {
     final packageVersions = getPackageVersions();
     final packageInfos = [
-      for (var packageName in packageVersions.keys)
+      for (final packageName in packageVersions.keys)
         proto.PackageInfo()
           ..name = packageName
           ..version = packageVersions[packageName]!
@@ -267,14 +257,10 @@ class CommonServerImpl {
       proto.VersionResponse()
         ..sdkVersion = _sdk.version
         ..sdkVersionFull = _sdk.versionFull
-        ..runtimeVersion = vmVersion
-        ..servicesVersion = servicesVersion
-        ..appEngineVersion = _container.version
-        ..flutterDartVersion = _sdk.version
-        ..flutterDartVersionFull = _sdk.versionFull
         ..flutterVersion = _sdk.flutterVersion
-        ..packageVersions.addAll(packageVersions)
-        ..packageInfo.addAll(packageInfos),
+        ..flutterEngineSha = _sdk.engineVersion
+        ..packageInfo.addAll(packageInfos)
+        ..experiment.addAll(_sdk.experiments),
     );
   }
 
@@ -289,7 +275,7 @@ class CommonServerImpl {
 
       final result = await _checkCache(memCacheKey);
       if (result != null) {
-        log.info('CACHE: Cache hit for compileDart2js');
+        log.fine('CACHE: Cache hit for compileDart2js');
         final resultObj = json.decode(result) as Map<String, dynamic>;
         final response = proto.CompileResponse()
           ..result = resultObj['compiledJS'] as String;
@@ -299,7 +285,7 @@ class CommonServerImpl {
         return response;
       }
 
-      log.info('CACHE: MISS for compileDart2js');
+      log.fine('CACHE: MISS for compileDart2js');
       final watch = Stopwatch()..start();
 
       final results = await _compiler.compileFiles(sources,
@@ -309,7 +295,7 @@ class CommonServerImpl {
         final lineCount = countLines(sources);
         final outputSize = (results.compiledJS?.length ?? 0 / 1024).ceil();
         final ms = watch.elapsedMilliseconds;
-        log.info('PERF: Compiled $lineCount lines of Dart into '
+        log.fine('PERF: Compiled $lineCount lines of Dart into '
             '${outputSize}kb of JavaScript in ${ms}ms using dart2js.');
         final sourceMap = returnSourceMap ? results.sourceMap : null;
 
@@ -346,14 +332,14 @@ class CommonServerImpl {
 
       final result = await _checkCache(memCacheKey);
       if (result != null) {
-        log.info('CACHE: Cache hit for compileDDC');
+        log.fine('CACHE: Cache hit for compileDDC');
         final resultObj = json.decode(result) as Map<String, dynamic>;
         return proto.CompileDDCResponse()
           ..result = resultObj['compiledJS'] as String
           ..modulesBaseUrl = resultObj['modulesBaseUrl'] as String;
       }
 
-      log.info('CACHE: MISS for compileDDC');
+      log.fine('CACHE: MISS for compileDDC');
       final watch = Stopwatch()..start();
 
       final results = await _compiler.compileFilesDDC(sources);
@@ -362,7 +348,7 @@ class CommonServerImpl {
         final lineCount = countLines(sources);
         final outputSize = (results.compiledJS?.length ?? 0 / 1024).ceil();
         final ms = watch.elapsedMilliseconds;
-        log.info('PERF: Compiled $lineCount lines of Dart into '
+        log.fine('PERF: Compiled $lineCount lines of Dart into '
             '${outputSize}kb of JavaScript in ${ms}ms using DDC.');
 
         final cachedResult = const JsonEncoder().convert(<String, String>{
@@ -387,6 +373,18 @@ class CommonServerImpl {
     }
   }
 
+  Future<proto.FlutterBuildResponse> _flutterBuild({
+    required String source,
+  }) async {
+    final results = await _compiler.flutterBuild(source);
+    if (results.hasOutput) {
+      return proto.FlutterBuildResponse()
+        ..artifacts['main.dart.js'] = results.compiledJavaScript!;
+    } else {
+      throw BadRequest(results.compilationIssues!);
+    }
+  }
+
   Future<String?> _checkCache(String query) => _cache.get(query);
 
   Future<void> _setCache(String query, String result) =>
@@ -401,9 +399,8 @@ String _hashSources(Map<String, String> sources) {
     return sha1.convert(sources.values.first.codeUnits).toString();
   } else {
     // Use chunk hashing method for >1 source files.
-    final AccumulatorSink<Digest> hashoutput = AccumulatorSink<Digest>();
-    final ByteConversionSink sha1Chunker =
-        sha1.startChunkedConversion(hashoutput);
+    final hashoutput = AccumulatorSink<Digest>();
+    final sha1Chunker = sha1.startChunkedConversion(hashoutput);
     sources.forEach((_, filecontents) {
       sha1Chunker.add(filecontents.codeUnits);
     });

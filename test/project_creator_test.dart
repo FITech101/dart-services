@@ -36,8 +36,7 @@ void defineTests() {
 
   group('basic dart project template', () {
     setUpAll(() async {
-      await (await projectCreator())
-          .buildDartProjectTemplate(oldChannel: channel == 'old');
+      await (await projectCreator()).buildDartProjectTemplate();
     });
 
     test('project directory is created', () async {
@@ -50,10 +49,11 @@ void defineTests() {
       await d.dir('project_templates', [
         d.dir('dart_project', [
           d.file(
-              'pubspec.yaml',
-              allOf([
-                matches("sdk: '>=$languageVersion <3.0.0'"),
-              ])),
+            'pubspec.yaml',
+            allOf([
+              contains('sdk: ^$languageVersion'),
+            ]),
+          ),
         ]),
       ]).validate();
     });
@@ -67,8 +67,10 @@ void defineTests() {
     test('recommended lints are enabled', () async {
       await d.dir('project_templates', [
         d.dir('dart_project', [
-          d.file('analysis_options.yaml',
-              matches('include: package:lints/recommended.yaml')),
+          d.file(
+            'analysis_options.yaml',
+            matches('include: package:lints/recommended.yaml'),
+          ),
         ]),
       ]).validate();
     });
@@ -76,10 +78,8 @@ void defineTests() {
 
   group('basic Flutter project template', () {
     setUpAll(() async {
-      await (await projectCreator()).buildFlutterProjectTemplate(
-          firebaseStyle: FirebaseStyle.none,
-          devMode: false,
-          oldChannel: channel == 'old');
+      await (await projectCreator())
+          .buildFlutterProjectTemplate(firebaseStyle: FirebaseStyle.none);
     });
 
     test('project directory is created', () async {
@@ -101,11 +101,12 @@ void defineTests() {
       await d.dir('project_templates', [
         d.dir('flutter_project', [
           d.file(
-              'pubspec.yaml',
-              allOf([
-                matches("sdk: '>=$languageVersion <3.0.0'"),
-                matches('sdk: flutter'),
-              ])),
+            'pubspec.yaml',
+            allOf([
+              contains('sdk: ^$languageVersion'),
+              matches('sdk: flutter'),
+            ]),
+          ),
         ]),
       ]).validate();
     });
@@ -119,8 +120,10 @@ void defineTests() {
     test('flutter lints are enabled', () async {
       await d.dir('project_templates', [
         d.dir('flutter_project', [
-          d.file('analysis_options.yaml',
-              matches('include: package:flutter_lints/flutter.yaml')),
+          d.file(
+            'analysis_options.yaml',
+            matches('include: package:flutter_lints/flutter.yaml'),
+          ),
         ]),
       ]).validate();
     });
@@ -128,8 +131,10 @@ void defineTests() {
     test('plugins are registered', () async {
       await d.dir('project_templates', [
         d.dir('flutter_project/lib', [
-          d.file('generated_plugin_registrant.dart',
-              matches('FirebaseCoreWeb.registerWith')),
+          d.file(
+            'generated_plugin_registrant.dart',
+            matches('FirebaseCoreWeb.registerWith'),
+          ),
         ]),
       ]).validate();
     });
@@ -138,9 +143,7 @@ void defineTests() {
   group('Firebase project template', () {
     setUpAll(() async {
       await (await projectCreator()).buildFlutterProjectTemplate(
-          firebaseStyle: FirebaseStyle.flutterFire,
-          devMode: false,
-          oldChannel: channel == 'old');
+          firebaseStyle: FirebaseStyle.flutterFire);
     });
 
     test('project directory is created', () async {
@@ -162,11 +165,12 @@ void defineTests() {
       await d.dir('project_templates', [
         d.dir('firebase_project', [
           d.file(
-              'pubspec.yaml',
-              allOf([
-                matches("sdk: '>=$languageVersion <3.0.0'"),
-                matches('sdk: flutter'),
-              ])),
+            'pubspec.yaml',
+            allOf([
+              contains('sdk: ^$languageVersion'),
+              matches('sdk: flutter'),
+            ]),
+          ),
         ]),
       ]).validate();
     });
@@ -180,22 +184,43 @@ void defineTests() {
     test('flutter lints are enabled', () async {
       await d.dir('project_templates', [
         d.dir('firebase_project', [
-          d.file('analysis_options.yaml',
-              matches('include: package:flutter_lints/flutter.yaml')),
+          d.file(
+            'analysis_options.yaml',
+            matches('include: package:flutter_lints/flutter.yaml'),
+          ),
+        ]),
+      ]).validate();
+    });
+
+    test('generated_plugin_registrant.dart is created', () async {
+      await d.dir('project_templates', [
+        d.dir('firebase_project', [
+          d.dir('lib', [
+            d.file(
+              'generated_plugin_registrant.dart',
+              isNotEmpty,
+            ),
+          ]),
         ]),
       ]).validate();
     });
 
     test('plugins are registered', () async {
       await d.dir('project_templates', [
-        d.dir('firebase_project/lib', [
-          d.file(
+        d.dir('firebase_project', [
+          d.dir('lib', [
+            d.file(
               'generated_plugin_registrant.dart',
               allOf([
                 matches('FirebaseFirestoreWeb.registerWith'),
-                matches('FirebaseAuthWeb.registerWith'),
+                matches('FirebaseAnalyticsWeb.registerWith'),
                 matches('FirebaseCoreWeb.registerWith'),
-              ])),
+                matches('FirebaseDatabaseWeb.registerWith'),
+                matches('FirebaseMessagingWeb.registerWith'),
+                matches('FirebaseStorageWeb.registerWith'),
+              ]),
+            ),
+          ]),
         ]),
       ]).validate();
     });

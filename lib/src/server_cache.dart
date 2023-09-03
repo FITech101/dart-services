@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.server_cache;
-
 import 'dart:async';
 import 'dart:math';
 
@@ -121,7 +119,7 @@ class RedisCache implements ServerCache {
             _resetConnection();
             log.warning('$_logPrefix: connection terminated, reconnecting');
             _reconnect();
-          }).catchError((e) {
+          }).catchError((dynamic e) {
             _resetConnection();
             log.warning(
                 '$_logPrefix: connection terminated with error $e, reconnecting');

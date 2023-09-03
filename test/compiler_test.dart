@@ -2,8 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.compiler_test;
-
 import 'dart:io';
 
 import 'package:dart_services/src/common.dart';
@@ -177,6 +175,21 @@ void main() {
       expect(result.problems.length, 0);
     });
 
+    test('good import - empty', () async {
+      const code = '''
+import '' as foo;
+
+int bar = 2;
+
+void main() {
+  print(foo.bar);
+}
+
+''';
+      final result = await compiler.compile(code);
+      expect(result.problems.length, 0);
+    });
+
     test('bad import - local', () async {
       const code = '''
 import 'foo.dart';
@@ -327,8 +340,8 @@ void main() { print ('foo'); }
 
     // Two separate files, illegal import in second file, test that
     // illegal imports within all files are detected.
-    final Map<String, String> filesVar2BadImports = {};
-    const String badImports = '''
+    final filesVar2BadImports = <String, String>{};
+    const badImports = '''
 import 'package:foo';
 import 'package:bar';
   ''';

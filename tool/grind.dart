@@ -2,7 +2,7 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.grind;
+// ignore_for_file: unreachable_from_main
 
 import 'dart:async';
 import 'dart:convert' show JsonEncoder;
@@ -49,19 +49,6 @@ Future<void> serve() async {
     _channel,
     '--port',
     '8082',
-  ]);
-}
-
-@Task()
-@Depends(buildStorageArtifacts)
-Future<void> serveNullSafety() async {
-  await _run(Platform.executable, arguments: [
-    path.join('bin', 'server_dev.dart'),
-    '--channel',
-    _channel,
-    '--port',
-    '8084',
-    '--null-safety',
   ]);
 }
 
@@ -160,17 +147,11 @@ void buildProjectTemplates() async {
     dependenciesFile: _pubDependenciesFile(channel: _channel),
     log: log,
   );
-  await projectCreator.buildDartProjectTemplate(oldChannel: sdk.oldChannel);
+  await projectCreator.buildDartProjectTemplate();
   await projectCreator.buildFlutterProjectTemplate(
-    firebaseStyle: FirebaseStyle.none,
-    devMode: sdk.devMode,
-    oldChannel: sdk.oldChannel,
-  );
+      firebaseStyle: FirebaseStyle.none);
   await projectCreator.buildFlutterProjectTemplate(
-    firebaseStyle: FirebaseStyle.flutterFire,
-    devMode: sdk.devMode,
-    oldChannel: sdk.oldChannel,
-  );
+      firebaseStyle: FirebaseStyle.flutterFire);
 }
 
 @Task('build the sdk compilation artifacts for upload to google storage')
@@ -207,7 +188,24 @@ Future<String> _buildStorageArtifacts(Directory dir, Sdk sdk,
   joinFile(dir, ['pubspec.yaml']).writeAsStringSync(pubspec);
 
   // Make sure the tooling knows this is a Flutter Web project
-  File(path.join(dir.path, 'web', 'index.html')).createSync(recursive: true);
+  final indexHtmlFile = File(path.join(dir.path, 'web', 'index.html'))
+    ..parent.createSync();
+  indexHtmlFile.writeAsStringSync('''
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <script src="main.dart.js" defer></script>
+</head>
+
+<body>
+</body>
+</html>
+''');
 
   await runFlutterPackagesGet(sdk.flutterToolPath, dir.path, log: log);
 
@@ -243,7 +241,8 @@ Future<String> _buildStorageArtifacts(Directory dir, Sdk sdk,
     }
   }
 
-  // Make sure flutter-sdk/bin/cache/flutter_web_sdk/flutter_web_sdk/kernel/flutter_ddc_sdk.dill
+  // Make sure
+  // flutter-sdks/<channel>/bin/cache/flutter_web_sdk/kernel/flutter_ddc_sdk.dill
   // is installed.
   await _run(
     sdk.flutterToolPath,
@@ -264,7 +263,6 @@ Future<String> _buildStorageArtifacts(Directory dir, Sdk sdk,
     path.join(sdk.dartSdkPath, 'bin', 'snapshots', 'dartdevc.dart.snapshot'),
     '-s',
     dillPath,
-    '--sound-null-safety',
     '--modules=amd',
     '--source-map',
     '-o',
@@ -293,8 +291,8 @@ Future<String> _buildStorageArtifacts(Directory dir, Sdk sdk,
 
   // Emit some good Google Storage upload instructions.
   final version = sdk.versionFull;
-  return ('  gsutil -h "Cache-Control: public, max-age=604800, immutable" cp -z js ${artifactsDir.path}/*.js*'
-      ' gs://nnbd_artifacts/$version/');
+  return '  gsutil -h "Cache-Control: public, max-age=604800, immutable" cp -z js ${artifactsDir.path}/*.js*'
+      ' gs://nnbd_artifacts/$version/';
 }
 
 @Task('Reinitialize the Flutter submodule.')
@@ -347,7 +345,7 @@ void deploy() {
 }
 
 @Task()
-@Depends(generateProtos, analyze, fuzz, buildStorageArtifacts)
+@Depends(analyze, fuzz, buildStorageArtifacts)
 void buildbot() {}
 
 @Task('Generate Protobuf classes')
@@ -362,7 +360,7 @@ void generateProtos() async {
         'installed (see README.md)');
   }
 
-  // reformat generated classes so travis dart format test doesn't fail
+  // reformat generated classes so CI checks don't fail
   await _run(
     'dart',
     arguments: ['format', '--fix', 'lib/src/protos'],
@@ -373,6 +371,10 @@ void generateProtos() async {
     'dart',
     arguments: ['format', '--fix', 'lib/src/protos'],
   );
+
+  // Copy to the front-end packages.
+  copy(getDir('lib/src/protos'), getDir('../dart_pad/lib/src/protos'));
+  copy(getDir('lib/src/protos'), getDir('../sketch_pad/lib/src/protos'));
 
   // generate common_server_proto.g.dart
   Pub.run('build_runner', arguments: ['build', '--delete-conflicting-outputs']);
@@ -416,19 +418,28 @@ Future<void> _updateDependenciesFile({
   required Sdk sdk,
 }) async {
   final tempDir = Directory.systemTemp.createTempSync('pubspec-scratch');
+
+  final dependencies = <String, String>{
+    'lints': 'any',
+    'flutter_lints': 'any',
+    for (final package in firebasePackages) package: 'any',
+    for (final package in supportedFlutterPackages(devMode: sdk.devMode))
+      package: 'any',
+    for (final package in supportedBasicDartPackages(devMode: sdk.devMode))
+      package: 'any',
+  };
+
+  // Overwrite with important constraints.
+  for (final entry in overrideVersionConstraints().entries) {
+    if (dependencies.containsKey(entry.key)) {
+      dependencies[entry.key] = entry.value;
+    }
+  }
+
   final pubspec = createPubspec(
     includeFlutterWeb: true,
     dartLanguageVersion: readDartLanguageVersion(_channel),
-    dependencies: {
-      'lints': 'any',
-      'flutter_lints': 'any',
-      for (var package in firebasePackages) package: 'any',
-      for (var package in supportedFlutterPackages(devMode: sdk.devMode))
-        package: 'any',
-      for (var package in supportedBasicDartPackages) package: 'any',
-      // Overwrite with important constraints:
-      ...packageVersionConstraints(oldChannel: sdk.oldChannel),
-    },
+    dependencies: dependencies,
   );
   joinFile(tempDir, ['pubspec.yaml']).writeAsStringSync(pubspec);
   await runFlutterPackagesGet(flutterToolPath, tempDir.path, log: log);

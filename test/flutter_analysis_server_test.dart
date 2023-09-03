@@ -2,12 +2,10 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library services.flutter_analyzer_server_test;
-
 import 'dart:io';
 
 import 'package:dart_services/src/analysis_server.dart';
-import 'package:dart_services/src/analysis_servers.dart';
+import 'package:dart_services/src/analyzer_wrapper.dart';
 import 'package:dart_services/src/common.dart';
 import 'package:dart_services/src/common_server_impl.dart';
 import 'package:dart_services/src/protos/dart_services.pbserver.dart';
@@ -24,8 +22,7 @@ void defineTests() {
 
     setUp(() async {
       final sdk = Sdk.create(channel);
-      analysisServer =
-          FlutterAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
+      analysisServer = DartAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
       await analysisServer.init();
     });
 
@@ -48,12 +45,12 @@ void defineTests() {
   group(
       'Flutter SDK analysis_server with analysis '
       'servers', () {
-    late AnalysisServersWrapper analysisServersWrapper;
-
+    late AnalyzerWrapper analysisServersWrapper;
+    late Sdk sdk;
     setUp(() async {
-      final sdk = Sdk.create(channel);
-      analysisServersWrapper = AnalysisServersWrapper(sdk.dartSdkPath);
-      await analysisServersWrapper.warmup();
+      sdk = Sdk.create(channel);
+      analysisServersWrapper = AnalyzerWrapper(sdk.dartSdkPath);
+      await analysisServersWrapper.init();
     });
 
     tearDown(() async {
@@ -110,8 +107,8 @@ class HelloWorld extends StatelessWidget {
       final issue = results.issues[0];
       expect(issue.line, 4);
       expect(issue.kind, 'info');
-      expect(
-          issue.message, 'Prefer typing uninitialized variables and fields.');
+      expect(issue.message,
+          'An uninitialized variable should have an explicit type annotation.');
     });
 
     test('analyze counter app', () async {
@@ -142,14 +139,12 @@ class HelloWorld extends StatelessWidget {
   group('CommonServerImpl flutter analyze', () {
     late CommonServerImpl commonServerImpl;
 
-    _MockContainer container;
     _MockCache cache;
 
     setUp(() async {
-      container = _MockContainer();
       cache = _MockCache();
       final sdk = Sdk.create(channel);
-      commonServerImpl = CommonServerImpl(container, cache, sdk);
+      commonServerImpl = CommonServerImpl(cache, sdk);
       await commonServerImpl.init();
     });
 
@@ -179,7 +174,7 @@ class HelloWorld extends StatelessWidget {
       setUp(() async {
         final sdk = Sdk.create(channel);
         analysisServer =
-            FlutterAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
+            DartAnalysisServerWrapper(dartSdkPath: sdk.dartSdkPath);
         await analysisServer.init();
       });
 
@@ -203,12 +198,12 @@ class HelloWorld extends StatelessWidget {
     group(
         'Flutter SDK analysis_server with analysis files={}'
         'servers', () {
-      late AnalysisServersWrapper analysisServersWrapper;
-
+      late AnalyzerWrapper analysisServersWrapper;
+      late Sdk sdk;
       setUp(() async {
-        final sdk = Sdk.create(channel);
-        analysisServersWrapper = AnalysisServersWrapper(sdk.dartSdkPath);
-        await analysisServersWrapper.warmup();
+        sdk = Sdk.create(channel);
+        analysisServersWrapper = AnalyzerWrapper(sdk.dartSdkPath);
+        await analysisServersWrapper.init();
       });
 
       tearDown(() async {
@@ -269,8 +264,8 @@ class HelloWorld extends StatelessWidget {
         final issue = results.issues[0];
         expect(issue.line, 4);
         expect(issue.kind, 'info');
-        expect(
-            issue.message, 'Prefer typing uninitialized variables and fields.');
+        expect(issue.message,
+            'An uninitialized variable should have an explicit type annotation.');
       });
 
       test('analyzeFiles counter app files={}', () async {
@@ -305,14 +300,12 @@ class HelloWorld extends StatelessWidget {
     group('CommonServerImpl flutter analyzeFiles files={}', () {
       late CommonServerImpl commonServerImpl;
 
-      _MockContainer container;
       _MockCache cache;
 
       setUp(() async {
-        container = _MockContainer();
         cache = _MockCache();
         final sdk = Sdk.create(channel);
-        commonServerImpl = CommonServerImpl(container, cache, sdk);
+        commonServerImpl = CommonServerImpl(cache, sdk);
         await commonServerImpl.init();
       });
 
@@ -321,26 +314,21 @@ class HelloWorld extends StatelessWidget {
       });
 
       test('counter app files={}', () async {
-        final results = await commonServerImpl.analyzeFiles(SourceFilesRequest(
-            files: {kMainDart: sampleCodeFlutterCounter},
-            activeSourceName: kMainDart,
-            offset: 0));
+        final results = await commonServerImpl.analyzeFiles(SourceFilesRequest()
+          ..files.addAll({kMainDart: sampleCodeFlutterCounter})
+          ..activeSourceName = kMainDart
+          ..offset = 0);
         expect(results.issues, isEmpty);
       });
 
       test('Draggable Physics sample files={}', () async {
-        final results = await commonServerImpl.analyzeFiles(SourceFilesRequest(
-            files: {kMainDart: sampleCodeFlutterDraggableCard},
-            activeSourceName: kMainDart));
+        final results = await commonServerImpl.analyzeFiles(SourceFilesRequest()
+          ..files.addAll({kMainDart: sampleCodeFlutterDraggableCard})
+          ..activeSourceName = kMainDart);
         expect(results.issues, isEmpty);
       });
     });
   });
-}
-
-class _MockContainer implements ServerContainer {
-  @override
-  String get version => vmVersion;
 }
 
 class _MockCache implements ServerCache {
