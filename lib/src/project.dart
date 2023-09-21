@@ -99,6 +99,7 @@ Set<String> supportedFlutterPackages({required bool devMode}) => {
       'go_router',
       'google_fonts',
       'hooks_riverpod',
+      'http',
       'provider',
       'riverpod_navigator',
       'shared_preferences',
