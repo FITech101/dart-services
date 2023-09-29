@@ -18,7 +18,7 @@ import 'pub.dart';
 import 'sdk.dart';
 import 'server_cache.dart';
 
-const Duration _standardExpiration = Duration(hours: 1);
+const Duration _standardExpiration = Duration(minutes: 5);
 final Logger log = Logger('common_server');
 
 class BadRequest implements Exception {
@@ -304,7 +304,7 @@ class CommonServerImpl {
           'sourceMap': sourceMap,
         });
         // Don't block on cache set.
-        unawaited(_setCache(memCacheKey, cachedResult));
+        // unawaited(_setCache(memCacheKey, cachedResult));
         final compileResponse = proto.CompileResponse();
         compileResponse.result = results.compiledJS ?? '';
         if (sourceMap != null) {
@@ -356,7 +356,7 @@ class CommonServerImpl {
           'modulesBaseUrl': results.modulesBaseUrl ?? '',
         });
         // Don't block on cache set.
-        unawaited(_setCache(memCacheKey, cachedResult));
+        // unawaited(_setCache(memCacheKey, cachedResult));
         return proto.CompileDDCResponse()
           ..result = results.compiledJS ?? ''
           ..modulesBaseUrl = results.modulesBaseUrl ?? '';
@@ -387,8 +387,10 @@ class CommonServerImpl {
 
   Future<String?> _checkCache(String query) => _cache.get(query);
 
-  Future<void> _setCache(String query, String result) =>
-      _cache.set(query, result, expiration: _standardExpiration);
+  Future<void> _setCache(String query, String result) async {
+// =>
+//       _cache.set(query, result, expiration: _standardExpiration);
+  }
 }
 
 String _printCompileProblem(CompilationProblem problem) => problem.message;

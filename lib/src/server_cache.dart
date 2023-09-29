@@ -223,7 +223,7 @@ class InMemoryCache implements ServerCache {
   // TODO: This is the only use of package:quiver; consider in-lining it.
   /// Wrapping an internal cache with a maximum size of 512 entries.
   final Cache<String, String> _lru =
-      MapCache<String, String>.lru(maximumSize: 512);
+      MapCache<String, String>.lru(maximumSize: 16);
 
   @override
   Future<String?> get(String key) async => _lru.get(key);
