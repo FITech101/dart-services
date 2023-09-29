@@ -457,6 +457,12 @@ const JsonEncoder _jsonEncoder = JsonEncoder.withIndent('  ');
 /// The file is at `tool/pub_dependencies_{channel}.json`, for the Flutter
 /// channels: stable, beta, dev, old.
 File _pubDependenciesFile({required String channel}) {
+  print("Reading pub dependencies file..");
+  print("Reading pub dependencies file..");
+  print("Reading pub dependencies file..");
+  print("Reading pub dependencies file..");
+  print("Reading pub dependencies file..");
+  print("Channel: $channel");
   final versionsFileName = 'pub_dependencies_$channel.json';
   return File(path.join(Directory.current.path, 'tool', versionsFileName));
 }

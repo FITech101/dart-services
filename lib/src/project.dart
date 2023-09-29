@@ -77,33 +77,11 @@ const Set<String> firebasePackages = {
 
 /// The set of supported Flutter-oriented packages.
 Set<String> supportedFlutterPackages({required bool devMode}) => {
-      'animations',
-      'creator',
-      'firebase_analytics',
-      'firebase_database',
-      'firebase_messaging',
-      'firebase_storage',
-      'flame',
-      'flame_fire_atlas',
-      'flame_forge2d',
-      'flame_splash_screen',
-      'flame_tiled',
-      'flutter_adaptive_scaffold',
-      'flutter_bloc',
-      'flutter_hooks',
-      'flutter_lints',
-      'flutter_map',
-      'flutter_processing',
       'flutter_riverpod',
-      'flutter_svg',
       'go_router',
       'google_fonts',
-      'hooks_riverpod',
       'http',
-      'provider',
-      'riverpod_navigator',
       'shared_preferences',
-      'video_player',
       if (devMode) ...[],
     };
 
@@ -118,33 +96,8 @@ Set<String> _packagesIndicatingFlutter({required bool devMode}) => {
 /// The set of basic Dart (non-Flutter) packages which can be directly imported
 /// into a script.
 Set<String> supportedBasicDartPackages({required bool devMode}) => {
-      'basics',
-      'bloc',
-      'characters',
-      'collection',
-      'cross_file',
-      'dartz',
-      'english_words',
-      'equatable',
-      'fast_immutable_collections',
       'http',
-      'intl',
-      'js',
-      'lints',
-      'matcher',
-      'meta',
-      'path',
-      'petitparser',
-      'quiver',
       'riverpod',
-      'rohd',
-      'rohd_vf',
-      'rxdart',
-      'timezone',
-      'tuple',
-      'vector_math',
-      'yaml',
-      'yaml_edit',
       if (devMode) ...[]
     };
 
